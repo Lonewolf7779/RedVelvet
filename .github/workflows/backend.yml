@@ -65,4 +65,4 @@ jobs:
 
       - name: Import & Application Startup Validation
         run: |
-          python -c "from apps.api.app.main import app; print('Application imported successfully with routes:', len(app.routes))"
+          PYTHONPATH=apps/api python -c "from app.main import app; print('Application imported successfully with routes:', len(app.routes))"
