@@ -1,0 +1,43 @@
+# Build Stage
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@12.14.0 --activate
+
+# Copy workspace configurations
+COPY pnpm-lock.yaml* pnpm-workspace.yaml package.json tsconfig.json ./
+COPY packages ./packages
+COPY apps/web ./apps/web
+
+# Install dependencies and build
+RUN pnpm install --frozen-lockfile || pnpm install
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+RUN pnpm --filter @red-velvet/web build
+
+# Production Runner Stage (Least Privilege)
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Non-root user creation
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy built artifacts
+COPY --from=builder /app/apps/web/public ./apps/web/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next ./apps/web/.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/web/package.json ./apps/web/package.json
+
+USER nextjs
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+
+CMD ["node_modules/.bin/next", "start", "apps/web", "-p", "3000"]

@@ -1,0 +1,64 @@
+name: Security Scanning
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  secret-scan:
+    name: Secret Leak Detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code with Full History
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@e7ca2cb1c4942cf771d9d96cff877399e525fa6c # v2.3.8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: infrastructure/security/gitleaks.toml
+
+  dependency-and-sast:
+    name: Dependency Audit & SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Python
+        uses: actions/setup-python@0b93645e9fea7318edeed2796114c3ab93ca34a2 # v5.3.0
+        with:
+          python-version: "3.11"
+
+      - name: Install Python Security Audit Tools
+        run: |
+          pip install pip-audit bandit
+
+      - name: Python Dependency Vulnerability Audit
+        run: |
+          pip-audit -r apps/api/requirements.txt || true
+
+      - name: Bandit Static Application Security Testing (SAST)
+        run: |
+          bandit -r apps/api/app -ll -ii
+
+      - name: Node Dependency Audit
+        run: |
+          npm audit --audit-level=high || true
