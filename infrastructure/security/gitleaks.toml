@@ -1,0 +1,12 @@
+title = "Red Velvet Secret Detection Rules"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for benign matches"
+paths = [
+  '''\.env\.example''',
+  '''package\.json''',
+  '''pnpm-lock\.yaml''',
+]

@@ -1,0 +1,68 @@
+name: Backend Validation
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+    paths:
+      - "apps/api/**"
+      - "tests/**"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/api/**"
+      - "tests/**"
+      - ".github/workflows/backend.yml"
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-backend:
+    name: Backend Lint, Typing & Test Pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Python Runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt
+          pip install -r apps/api/requirements-dev.txt
+
+      - name: Ruff Linter & Code Style
+        run: |
+          ruff check apps/api
+          ruff format --check apps/api
+
+      - name: Mypy Static Type Checking
+        run: |
+          mypy apps/api/app
+
+      - name: Pytest Unit & Integration Tests with Coverage
+        env:
+          ENVIRONMENT: "test"
+          DATABASE_URL: "postgresql+asyncpg://test_user:test_pwd@localhost:5432/test_db"
+          REDIS_URL: "redis://localhost:6379/0"
+        run: |
+          pytest apps/api/tests tests/security --cov=apps/api/app --cov-report=term-missing --cov-report=xml
+
+      - name: Import & Application Startup Validation
+        run: |
+          PYTHONPATH=apps/api python -c "from app.main import app; print('Application imported successfully with routes:', len(app.routes))"
